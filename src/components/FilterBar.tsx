@@ -1,3 +1,4 @@
+import { For } from "solid-js"
 import {
   opportunityFilter,
   opportunitySortField,
@@ -12,8 +13,8 @@ export function FilterBar() {
 
   const filters: { value: OpportunityFilter; label: string }[] = [
     { value: "all", label: "All" },
-    { value: "cross-market", label: "Cross-Market" },
-    { value: "intra-market", label: "Intra-Market" },
+    { value: "cross-market", label: "Cross" },
+    { value: "intra-market", label: "Intra" },
   ]
 
   const sortOptions: { value: SortField; label: string }[] = [
@@ -25,27 +26,37 @@ export function FilterBar() {
   return (
     <box
       flexDirection="row"
-      style={{ width: "100%", paddingLeft: 1, paddingRight: 1, gap: 2 }}
+      style={{ width: "100%", paddingLeft: 1, paddingRight: 1 }}
     >
       <box flexDirection="row">
         <text fg="#888888">Filter: </text>
-        <tab-select
-          options={filters.map((f) => ({ label: f.label, value: f.value }))}
-          selected={opportunityFilter()}
-          onChange={(value: string) => setFilter(value as OpportunityFilter)}
-        />
+        <For each={filters}>
+          {(f) => (
+            <text
+              fg={opportunityFilter() === f.value ? "#2ECC71" : "#ECF0F1"}
+              style={{ marginRight: 1 }}
+            >
+              [{f.label}]
+            </text>
+          )}
+        </For>
       </box>
 
-      <box flexDirection="row">
+      <box flexDirection="row" style={{ marginLeft: 2 }}>
         <text fg="#888888">Sort: </text>
-        <tab-select
-          options={sortOptions.map((s) => ({ label: s.label, value: s.value }))}
-          selected={opportunitySortField()}
-          onChange={(value: string) => setSortField(value as SortField)}
-        />
+        <For each={sortOptions}>
+          {(s) => (
+            <text
+              fg={opportunitySortField() === s.value ? "#2ECC71" : "#ECF0F1"}
+              style={{ marginRight: 1 }}
+            >
+              [{s.label}]
+            </text>
+          )}
+        </For>
       </box>
 
-      <box flexDirection="row">
+      <box flexDirection="row" style={{ marginLeft: 2 }}>
         <text fg="#888888">Min Profit: {opportunityMinProfit()}%</text>
       </box>
     </box>

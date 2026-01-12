@@ -51,16 +51,16 @@ export function OpportunityList() {
         }}
       >
         <text style={{ width: 8 }} fg="#ECF0F1">
-          <strong>Type</strong>
+          Type
         </text>
         <text style={{ width: 35, flexGrow: 1 }} fg="#ECF0F1">
-          <strong>Event</strong>
+          Event
         </text>
         <text style={{ width: 10 }} fg="#ECF0F1">
-          <strong>Profit</strong>
+          Profit
         </text>
         <text style={{ width: 10 }} fg="#ECF0F1">
-          <strong>Capital</strong>
+          Capital
         </text>
       </box>
 
@@ -98,7 +98,7 @@ export function OpportunityList() {
                     {truncateTitle(getEventTitle(opp))}
                   </text>
                   <text style={{ width: 10 }} fg="#2ECC71">
-                    <strong>{formatProfit(opp.profitMargin)}</strong>
+                    {formatProfit(opp.profitMargin)}
                   </text>
                   <text style={{ width: 10 }} fg="#F39C12">
                     {opp.type === "cross-market"

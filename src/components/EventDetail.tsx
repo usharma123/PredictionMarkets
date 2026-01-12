@@ -45,7 +45,7 @@ function CrossMarketDetail(props: { opp: ArbitrageOpportunity }) {
   return (
     <box flexDirection="column">
       <text fg="#9B59B6">
-        <strong>CROSS-MARKET ARBITRAGE</strong>
+        CROSS-MARKET ARBITRAGE
       </text>
 
       <box style={{ marginTop: 1 }}>
@@ -54,20 +54,20 @@ function CrossMarketDetail(props: { opp: ArbitrageOpportunity }) {
       </box>
 
       <box style={{ marginTop: 1 }} flexDirection="column">
-        <text><strong>Trade Instructions:</strong></text>
+        <text>Trade Instructions:</text>
 
         <box style={{ marginTop: 1, paddingLeft: 2 }}>
           <text fg="#2ECC71">BUY </text>
           <text fg="#F39C12">{opp().trade.buy.side.toUpperCase()} </text>
           <text>on {opp().trade.buy.platform} @ </text>
-          <text><strong>{formatPrice(opp().trade.buy.price)}</strong></text>
+          <text>{formatPrice(opp().trade.buy.price)}</text>
         </box>
 
         <box style={{ paddingLeft: 2 }}>
           <text fg="#E74C3C">SELL </text>
           <text fg="#F39C12">{opp().trade.sell.side.toUpperCase()} </text>
           <text>on {opp().trade.sell.platform} @ </text>
-          <text><strong>{formatPrice(opp().trade.sell.price)}</strong></text>
+          <text>{formatPrice(opp().trade.sell.price)}</text>
         </box>
       </box>
 
@@ -75,7 +75,7 @@ function CrossMarketDetail(props: { opp: ArbitrageOpportunity }) {
         <box style={{ marginRight: 3 }}>
           <text fg="#888888">Profit Margin: </text>
           <text fg="#2ECC71">
-            <strong>{formatPercent(opp().profitMargin)}</strong>
+            {formatPercent(opp().profitMargin)}
           </text>
         </box>
 
@@ -106,7 +106,7 @@ function IntraMarketDetail(props: { opp: IntraMarketOpportunity }) {
   return (
     <box flexDirection="column">
       <text fg="#3498DB">
-        <strong>INTRA-MARKET ARBITRAGE</strong>
+        INTRA-MARKET ARBITRAGE
       </text>
 
       <box style={{ marginTop: 1 }}>
@@ -120,7 +120,7 @@ function IntraMarketDetail(props: { opp: IntraMarketOpportunity }) {
       </box>
 
       <box style={{ marginTop: 1 }} flexDirection="column">
-        <text><strong>Mispriced Spread:</strong></text>
+        <text>Mispriced Spread:</text>
 
         <box style={{ marginTop: 1, paddingLeft: 2 }} flexDirection="row">
           <box style={{ marginRight: 3 }}>
@@ -144,13 +144,13 @@ function IntraMarketDetail(props: { opp: IntraMarketOpportunity }) {
       </box>
 
       <box style={{ marginTop: 1 }}>
-        <text><strong>Strategy:</strong> Buy both YES and NO contracts</text>
+        <text>Strategy: Buy both YES and NO contracts</text>
       </box>
 
       <box style={{ marginTop: 1 }}>
         <text fg="#888888">Guaranteed Profit: </text>
         <text fg="#2ECC71">
-          <strong>{formatPercent(opp().profitMargin)}</strong>
+          {formatPercent(opp().profitMargin)}
         </text>
       </box>
     </box>

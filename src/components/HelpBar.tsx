@@ -9,13 +9,18 @@ export function HelpBar() {
         backgroundColor: "#1E1E1E",
       }}
     >
-      <text fg="#888888">
-        <text fg="#ECF0F1">[↑↓]</text> Navigate{" "}
-        <text fg="#ECF0F1">[Enter]</text> Details{" "}
-        <text fg="#ECF0F1">[r]</text> Refresh{" "}
-        <text fg="#ECF0F1">[f]</text> Filter{" "}
-        <text fg="#ECF0F1">[q]</text> Quit
-      </text>
+      <box flexDirection="row">
+        <text fg="#ECF0F1">[↑↓]</text>
+        <text fg="#888888"> Navigate </text>
+        <text fg="#ECF0F1">[Enter]</text>
+        <text fg="#888888"> Details </text>
+        <text fg="#ECF0F1">[r]</text>
+        <text fg="#888888"> Refresh </text>
+        <text fg="#ECF0F1">[f]</text>
+        <text fg="#888888"> Filter </text>
+        <text fg="#ECF0F1">[q]</text>
+        <text fg="#888888"> Quit</text>
+      </box>
     </box>
   )
 }

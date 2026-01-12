@@ -38,9 +38,8 @@ export function StatusBar() {
         <text fg="#888888">
           Updated: {formatTimeSince(marketsLastUpdated())}
         </text>
-        <text style={{ marginLeft: 2 }}>
-          Opportunities: <text fg="#F39C12">{totalOpportunities()}</text>
-        </text>
+        <text style={{ marginLeft: 2 }}>Opportunities: </text>
+        <text fg="#F39C12">{totalOpportunities()}</text>
       </box>
     </box>
   )

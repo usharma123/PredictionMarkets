@@ -1,4 +1,6 @@
-import type { Market, MarketPair } from "../models/market"
+import type { Market, MarketPair, DomeMatchedPair } from "../models/market"
+import type { DomeMatchingMarketsResponse, DomeMatchingMarket } from "../api/types"
+import { domeClient } from "../api/dome"
 
 interface MatchResult {
   kalshiMarket: Market
@@ -160,4 +162,140 @@ export function findUnmatchedMarkets(
     kalshi: kalshiMarkets.filter((m) => !matchedKalshi.has(m.id)),
     polymarket: polymarketMarkets.filter((m) => !matchedPoly.has(m.id)),
   }
+}
+
+// ==================== Dome API Matching ====================
+
+/**
+ * Use Dome's matching markets API for sports markets.
+ * This provides pre-matched markets from Dome's backend.
+ */
+export async function matchMarketsWithDome(
+  kalshiMarkets: Market[],
+  polymarketMarkets: Market[],
+  sport: "nfl" | "mlb" | "cfb" | "nba" | "nhl" | "cbb",
+  date: string // YYYY-MM-DD
+): Promise<MarketPair[]> {
+  try {
+    const response = await domeClient.getMatchingMarketsBySport({ sport, date })
+    return processDomeMatchingResponse(response, kalshiMarkets, polymarketMarkets)
+  } catch (err) {
+    console.warn("Dome matching API failed, falling back to local matching:", err)
+    return matchMarkets(kalshiMarkets, polymarketMarkets)
+  }
+}
+
+/**
+ * Process Dome's matching markets response into MarketPairs
+ */
+function processDomeMatchingResponse(
+  response: DomeMatchingMarketsResponse,
+  kalshiMarkets: Market[],
+  polymarketMarkets: Market[]
+): MarketPair[] {
+  const pairs: MarketPair[] = []
+
+  // Create lookup maps for faster matching
+  const kalshiByTicker = new Map<string, Market>()
+  const kalshiByEventTicker = new Map<string, Market[]>()
+  const polyBySlug = new Map<string, Market>()
+  const polyByConditionId = new Map<string, Market>()
+
+  for (const market of kalshiMarkets) {
+    kalshiByTicker.set(market.ticker, market)
+    if (market.domeEventTicker) {
+      const existing = kalshiByEventTicker.get(market.domeEventTicker) || []
+      existing.push(market)
+      kalshiByEventTicker.set(market.domeEventTicker, existing)
+    }
+  }
+
+  for (const market of polymarketMarkets) {
+    if (market.domeMarketSlug) {
+      polyBySlug.set(market.domeMarketSlug, market)
+    }
+    if (market.domeConditionId) {
+      polyByConditionId.set(market.domeConditionId, market)
+    }
+  }
+
+  // Process each matching group from Dome
+  for (const [key, matchedMarkets] of Object.entries(response.markets)) {
+    let polymarket: Market | undefined
+    let kalshi: Market | undefined
+
+    for (const match of matchedMarkets) {
+      if (match.platform === "POLYMARKET" && match.market_slug) {
+        polymarket = polyBySlug.get(match.market_slug)
+      } else if (match.platform === "KALSHI") {
+        // Try to find by event ticker first, then by market ticker
+        if (match.event_ticker) {
+          const kalshiList = kalshiByEventTicker.get(match.event_ticker)
+          if (kalshiList && kalshiList.length > 0) {
+            kalshi = kalshiList[0] // Take the first one
+          }
+        }
+        if (!kalshi && match.market_tickers && match.market_tickers.length > 0) {
+          kalshi = kalshiByTicker.get(match.market_tickers[0])
+        }
+      }
+    }
+
+    if (polymarket && kalshi) {
+      pairs.push({
+        kalshi,
+        polymarket,
+        matchConfidence: 1.0, // Dome-matched markets have high confidence
+        matchReason: "Dome API match",
+      })
+    }
+  }
+
+  return pairs
+}
+
+/**
+ * Parse Dome matching response into structured pairs
+ */
+export function parseDomeMatchedPairs(response: DomeMatchingMarketsResponse): DomeMatchedPair[] {
+  const pairs: DomeMatchedPair[] = []
+
+  for (const [key, matchedMarkets] of Object.entries(response.markets)) {
+    const pair: DomeMatchedPair = { key }
+
+    for (const match of matchedMarkets) {
+      if (match.platform === "POLYMARKET") {
+        pair.polymarket = {
+          market_slug: match.market_slug || "",
+          token_ids: match.token_ids || [],
+        }
+      } else if (match.platform === "KALSHI") {
+        pair.kalshi = {
+          event_ticker: match.event_ticker || "",
+          market_tickers: match.market_tickers || [],
+        }
+      }
+    }
+
+    pairs.push(pair)
+  }
+
+  return pairs
+}
+
+/**
+ * Hybrid matching: Use Dome API when available, fall back to local matching
+ */
+export async function hybridMatchMarkets(
+  kalshiMarkets: Market[],
+  polymarketMarkets: Market[],
+  useDomeApi: boolean = true
+): Promise<MarketPair[]> {
+  if (!useDomeApi || !domeClient.isConfigured()) {
+    return matchMarkets(kalshiMarkets, polymarketMarkets)
+  }
+
+  // For now, use local matching since Dome's matching is primarily for sports
+  // In the future, this could be enhanced to use Dome's API for supported categories
+  return matchMarkets(kalshiMarkets, polymarketMarkets)
 }

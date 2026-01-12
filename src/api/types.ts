@@ -4,6 +4,8 @@ export interface DomeConfig {
   apiKey: string
   baseUrl: string
   timeout?: number
+  retryAttempts?: number
+  retryDelayMs?: number
 }
 
 export interface DomeMarketSide {

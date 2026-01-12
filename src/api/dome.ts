@@ -9,15 +9,56 @@ import type {
 } from "./types"
 
 const DEFAULT_BASE_URL = "https://api.domeapi.io/v1"
+const DEFAULT_TIMEOUT_MS = 30000
+const DEFAULT_RETRY_ATTEMPTS = 2
+const DEFAULT_RETRY_DELAY_MS = 500
+
+function parseEnvNumber(value: string | undefined): number | undefined {
+  if (!value) return undefined
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function isRetryableStatus(status: number): boolean {
+  return status === 408 || status === 429 || status >= 500
+}
+
+function isRetryableError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  if (error.name === "AbortError") return true
+  const message = error.message.toLowerCase()
+  return (
+    message.includes("timeout") ||
+    message.includes("timed out") ||
+    message.includes("econnreset") ||
+    message.includes("eai_again") ||
+    message.includes("enotfound")
+  )
+}
+
+function getBackoffDelay(attempt: number, baseDelayMs: number): number {
+  const jitter = Math.floor(Math.random() * 100)
+  return baseDelayMs * Math.pow(2, attempt) + jitter
+}
 
 export class DomeClient {
   private config: DomeConfig
 
   constructor(config?: Partial<DomeConfig>) {
+    const envTimeout = parseEnvNumber(process.env.DOME_TIMEOUT_MS)
+    const envRetryAttempts = parseEnvNumber(process.env.DOME_RETRY_ATTEMPTS)
+    const envRetryDelayMs = parseEnvNumber(process.env.DOME_RETRY_DELAY_MS)
+
     this.config = {
       baseUrl: config?.baseUrl ?? DEFAULT_BASE_URL,
       apiKey: config?.apiKey ?? process.env.DOME_API_KEY ?? "",
-      timeout: config?.timeout ?? 15000,
+      timeout: config?.timeout ?? envTimeout ?? DEFAULT_TIMEOUT_MS,
+      retryAttempts: config?.retryAttempts ?? envRetryAttempts ?? DEFAULT_RETRY_ATTEMPTS,
+      retryDelayMs: config?.retryDelayMs ?? envRetryDelayMs ?? DEFAULT_RETRY_DELAY_MS,
     }
   }
 
@@ -30,19 +71,49 @@ export class DomeClient {
     if (this.config.apiKey) {
       headers["Authorization"] = `Bearer ${this.config.apiKey}`
     }
+    const retries = this.config.retryAttempts ?? DEFAULT_RETRY_ATTEMPTS
+    const baseDelayMs = this.config.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS
+    const timeoutMs = this.config.timeout ?? DEFAULT_TIMEOUT_MS
 
-    const response = await fetch(url, {
-      ...options,
-      headers: { ...headers, ...options?.headers },
-      signal: AbortSignal.timeout(this.config.timeout ?? 15000),
-    })
+    let attempt = 0
+    let lastError: unknown
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => "Unknown error")
-      throw new Error(`Dome API error: ${response.status} ${response.statusText} - ${errorText}`)
+    while (attempt <= retries) {
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+
+      try {
+        const response = await fetch(url, {
+          ...options,
+          headers: { ...headers, ...options?.headers },
+          signal: controller.signal,
+        })
+
+        if (!response.ok) {
+          const errorText = await response.text().catch(() => "Unknown error")
+          if (attempt < retries && isRetryableStatus(response.status)) {
+            await sleep(getBackoffDelay(attempt, baseDelayMs))
+            attempt++
+            continue
+          }
+          throw new Error(`Dome API error: ${response.status} ${response.statusText} - ${errorText}`)
+        }
+
+        return response.json()
+      } catch (error) {
+        lastError = error
+        if (attempt < retries && isRetryableError(error)) {
+          await sleep(getBackoffDelay(attempt, baseDelayMs))
+          attempt++
+          continue
+        }
+        throw error
+      } finally {
+        clearTimeout(timeoutId)
+      }
     }
 
-    return response.json()
+    throw lastError ?? new Error("Dome API error: Request failed after retries")
   }
 
   // ==================== Polymarket Endpoints ====================

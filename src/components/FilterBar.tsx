@@ -7,9 +7,11 @@ import {
   type OpportunityFilter,
   type SortField,
 } from "../stores/opportunities"
+import { useMarkets } from "../stores/markets"
 
 export function FilterBar() {
   const { setFilter, setSortField, setMinProfit } = useOpportunities()
+  const { marketSearchQuery, setMarketSearchQuery } = useMarkets()
 
   const filters: { value: OpportunityFilter; label: string }[] = [
     { value: "all", label: "All" },
@@ -58,6 +60,21 @@ export function FilterBar() {
 
       <box flexDirection="row" style={{ marginLeft: 2 }}>
         <text fg="#888888">Min Profit: {opportunityMinProfit()}%</text>
+      </box>
+
+      <box flexDirection="row" style={{ marginLeft: 2, flexGrow: 1 }}>
+        <text fg="#888888">Search: </text>
+        <input
+          value={marketSearchQuery()}
+          placeholder="Search markets (2+ chars)..."
+          onInput={setMarketSearchQuery}
+          focused
+          backgroundColor="#1E1E1E"
+          textColor="#ECF0F1"
+          style={{
+            width: 30,
+          }}
+        />
       </box>
     </box>
   )

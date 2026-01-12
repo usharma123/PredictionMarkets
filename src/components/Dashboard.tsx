@@ -2,18 +2,21 @@ import { createEffect, onCleanup, Show } from "solid-js"
 import { StatusBar } from "./StatusBar"
 import { FilterBar } from "./FilterBar"
 import { OpportunityList } from "./OpportunityList"
+import { MarketSearchResults } from "./MarketSearchResults"
 import { EventDetail } from "./EventDetail"
 import { HelpBar } from "./HelpBar"
 import {
   useMarkets,
   marketsLoading,
   marketsError,
+  marketSearchQuery,
 } from "../stores/markets"
-import { useOpportunities, selectedOpportunity } from "../stores/opportunities"
+import { useOpportunities } from "../stores/opportunities"
 
 export function Dashboard() {
   const { startAutoRefresh, stopAutoRefresh, refresh } = useMarkets()
   const { detect, selectNext, selectPrev } = useOpportunities()
+  const isSearching = () => marketSearchQuery().trim().length >= 2
 
   // Start fetching data and detecting opportunities
   createEffect(() => {
@@ -68,7 +71,9 @@ export function Dashboard() {
                 </box>
               }
             >
-              <OpportunityList />
+              <Show when={!isSearching()} fallback={<MarketSearchResults />}>
+                <OpportunityList />
+              </Show>
             </Show>
           </Show>
         </box>

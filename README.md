@@ -1,146 +1,323 @@
-# Dexter 🤖
+# BOT - Prediction Market Arbitrage Detection
 
-Dexter is an autonomous financial research agent that thinks, plans, and learns as it works. It performs analysis using task planning, self-reflection, and real-time market data. Think Claude Code, but built specifically for financial research.
-
-
-<img width="979" height="651" alt="Screenshot 2025-10-14 at 6 12 35 PM" src="https://github.com/user-attachments/assets/5a2859d4-53cf-4638-998a-15cef3c98038" />
+A terminal-based tool for detecting arbitrage opportunities across prediction markets (Kalshi and Polymarket) with TimescaleDB-powered analytics and time-series data storage.
 
 ## Overview
 
-Dexter takes complex financial questions and turns them into clear, step-by-step research plans. It runs those tasks using live market data, checks its own work, and refines the results until it has a confident, data-backed answer.  
+BOT monitors prediction markets in real-time and identifies arbitrage opportunities by:
+- **Cross-market arbitrage**: Finding price discrepancies between the same event on Kalshi and Polymarket
+- **Intra-market arbitrage**: Detecting when YES + NO prices sum to less than 1 on a single market
 
-**Key Capabilities:**
-- **Intelligent Task Planning**: Automatically decomposes complex queries into structured research steps
-- **Autonomous Execution**: Selects and executes the right tools to gather financial data
-- **Self-Validation**: Checks its own work and iterates until tasks are complete
-- **Real-Time Financial Data**: Access to income statements, balance sheets, and cash flow statements
-- **Safety Features**: Built-in loop detection and step limits to prevent runaway execution
+The application stores all market data in TimescaleDB for historical analysis, trend tracking, and advanced analytics.
 
-[![Twitter Follow](https://img.shields.io/twitter/follow/virattt?style=social)](https://twitter.com/virattt)
+## Features
 
-<img width="996" height="639" alt="Screenshot 2025-11-22 at 1 45 07 PM" src="https://github.com/user-attachments/assets/8915fd70-82c9-4775-bdf9-78d5baf28a8a" />
+- Real-time market data from Kalshi and Polymarket via the Dome API
+- Fuzzy matching algorithm to pair similar markets across platforms
+- Configurable profit margin thresholds
+- Filter and sort opportunities by profit, confidence, or time
+- Market search functionality
+- Auto-refresh with configurable intervals
+- **TimescaleDB integration** for time-series data storage
+- **Advanced analytics** with continuous aggregates and hypertables
+- **Historical tracking** of opportunities and market prices
+- **Performance monitoring** with scan history and metrics
 
+## Prerequisites
 
-### Prerequisites
+- [Bun](https://bun.sh) runtime (v1.0 or higher)
+- [Docker](https://www.docker.com) and Docker Compose (required for running TimescaleDB database)
+- Dome API key (get one at [dashboard.domeapi.io](https://dashboard.domeapi.io))
 
-- [Bun](https://bun.com) runtime (v1.0 or higher)
-- OpenAI API key (get [here](https://platform.openai.com/api-keys))
-- Financial Datasets API key (get [here](https://financialdatasets.ai))
-- Tavily API key (get [here](https://tavily.com)) - optional, for web search
+> **Note**: The database runs in a Docker container. Make sure Docker Desktop (or Docker Engine) is installed and running before starting the database.
 
-#### Installing Bun
+## Installation
 
-If you don't have Bun installed, you can install it using curl:
+### 1. Clone the repository
 
-**macOS/Linux:**
 ```bash
-curl -fsSL https://bun.com/install | bash
+git clone https://github.com/your-username/prediction-markets.git
+cd prediction-markets
 ```
 
-**Windows:**
-```bash
-powershell -c "irm bun.sh/install.ps1|iex"
-```
+### 2. Install dependencies
 
-After installation, restart your terminal and verify Bun is installed:
-```bash
-bun --version
-```
-
-### Installing Dexter
-
-1. Clone the repository:
-```bash
-git clone https://github.com/virattt/dexter.git
-cd dexter
-```
-
-2. Install dependencies with Bun:
 ```bash
 bun install
 ```
 
-3. Set up your environment variables:
+### 3. Set up environment variables
+
+Create a `.env` file in the root directory:
+
 ```bash
-# Copy the example environment file (from parent directory)
-cp env.example .env
+# Dome API Configuration
+DOME_API_KEY=your-api-key-here
 
-# Edit .env and add your API keys (if using cloud providers)
-# OPENAI_API_KEY=your-openai-api-key
-# ANTHROPIC_API_KEY=your-anthropic-api-key
-# GOOGLE_API_KEY=your-google-api-key
-
-# (Optional) If using Ollama locally
-# OLLAMA_BASE_URL=http://127.0.0.1:11434
-
-# Other required keys
-# FINANCIAL_DATASETS_API_KEY=your-financial-datasets-api-key
-# TAVILY_API_KEY=your-tavily-api-key
+# Database Configuration (optional - defaults shown)
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=predmarket
+DB_USER=predmarket
+DB_PASSWORD=predmarket_dev
 ```
 
-### Usage
+### 4. Start the database (Docker)
 
-Run Dexter in interactive mode:
+**The database runs in Docker.** Start TimescaleDB using Docker Compose:
+
+```bash
+# Make sure Docker is running first!
+bun run db:up
+```
+
+This command runs `docker compose up -d` which will:
+- Start a TimescaleDB container on port 5432
+- Automatically run schema migrations from `db/init/001_schema.sql`
+- Create hypertables, continuous aggregates, and compression policies
+
+**Verify Docker is running:**
+```bash
+docker ps
+```
+
+**Check database logs:**
+```bash
+bun run db:logs
+```
+
+Wait for the database to be healthy before proceeding. You should see "healthy" status when running `docker compose ps`.
+
+### 5. Verify database setup
+
+Run the test suite to verify everything is working:
+
+```bash
+bun test
+```
+
+You should see all tests passing, including database connection, TimescaleDB features, and analytics queries.
+
+## Usage
+
+### Running the Application
+
+Start the TUI application:
+
 ```bash
 bun start
 ```
 
 Or with watch mode for development:
+
 ```bash
 bun dev
 ```
 
-### Example Queries
+### Keyboard Shortcuts
 
-Try asking Dexter questions like:
-- "What was Apple's revenue growth over the last 4 quarters?"
-- "Compare Microsoft and Google's operating margins for 2023"
-- "Analyze Tesla's cash flow trends over the past year"
-- "What is Amazon's debt-to-equity ratio based on recent financials?"
+| Key | Action |
+|-----|--------|
+| `↑↓` | Navigate opportunities |
+| `Enter` | View opportunity details |
+| `r` | Refresh market data |
+| `f` | Cycle through filters |
+| `q` | Quit |
 
-Dexter will automatically:
-1. Break down your question into research tasks
-2. Fetch the necessary financial data
-3. Perform calculations and analysis
-4. Provide a comprehensive, data-rich answer
+### Database Management Commands (Docker)
 
-## Architecture
+All database operations use Docker:
 
-Dexter uses a multi-agent architecture with specialized components:
+```bash
+# Start the database (Docker container)
+bun run db:up
+# Equivalent to: docker compose up -d
 
-- **Planning Agent**: Analyzes queries and creates structured task lists
-- **Action Agent**: Selects appropriate tools and executes research steps
-- **Validation Agent**: Verifies task completion and data sufficiency
-- **Answer Agent**: Synthesizes findings into comprehensive responses
+# Stop the database (Docker container)
+bun run db:down
+# Equivalent to: docker compose down
+
+# View database logs (Docker container logs)
+bun run db:logs
+# Equivalent to: docker compose logs -f timescaledb
+
+# Check database container status
+docker compose ps
+
+# Access database directly (optional)
+docker exec -it predmarket-timescaledb psql -U predmarket -d predmarket
+```
+
+**Important**: The database data persists in a Docker volume (`timescaledb_data`). Stopping the container with `bun run db:down` preserves your data. To completely remove data, use `docker compose down -v`.
+
+## Project Structure
+
+```
+src/
+├── api/              # Dome API client and types
+├── arbitrage/        # Arbitrage detection logic
+│   ├── calculator.ts # Profit calculations
+│   ├── detector.ts  # Main detection orchestrator
+│   └── matcher.ts   # Market matching algorithms
+├── components/       # Solid.js TUI components
+├── db/               # Database layer
+│   ├── connection.ts # Database connection management
+│   ├── repositories/ # Data access layer
+│   │   ├── markets.ts
+│   │   ├── snapshots.ts
+│   │   ├── opportunities.ts
+│   │   └── analytics.ts  # Advanced analytics queries
+│   ├── cache/        # Cache management
+│   └── types.ts       # Database types and utilities
+├── models/           # TypeScript types and Zod schemas
+├── stores/           # Reactive state management
+└── utils/            # Fuzzy matching and helpers
+
+db/
+└── init/
+    └── 001_schema.sql # Database schema and migrations
+```
+
+## Database Schema
+
+The application uses TimescaleDB with the following key components:
+
+### Tables
+- **markets**: Deduplicated market metadata
+- **market_snapshots**: Time-series hypertable for price data
+- **arbitrage_opportunities**: Detected opportunities
+- **opportunity_snapshots**: Time-series tracking of opportunity profit
+- **executions**: Trade execution tracking
+- **scan_history**: Audit trail for market scans
+
+### Continuous Aggregates
+- **market_prices_hourly**: Pre-aggregated hourly price data
+- **opportunities_daily**: Daily opportunity summaries
+
+### Features
+- Automatic compression after 7 days (market_snapshots) and 1 day (opportunity_snapshots)
+- Retention policies: 90 days for market snapshots, 30 days for opportunity snapshots
+- Indexes optimized for time-series queries
+
+## Analytics
+
+The `analyticsRepository` provides advanced analytics queries:
+
+- **Dashboard Statistics**: Comprehensive stats for markets, opportunities, snapshots, and scans
+- **Market Price History**: Hourly aggregates with gap-filling
+- **Top Markets**: By volume and volatility
+- **Opportunity Trends**: Profit margin trends over time
+- **Platform Comparison**: Price differences between Kalshi and Polymarket
+- **Performance Metrics**: Scan performance and database health
+
+Example usage:
+
+```typescript
+import { analyticsRepository } from "./db/repositories"
+
+// Get dashboard stats
+const stats = await analyticsRepository.getDashboardStats()
+
+// Get price history for a market
+const history = await analyticsRepository.getMarketPriceHistory(marketDbId, 24)
+
+// Get top markets by volume
+const topMarkets = await analyticsRepository.getTopMarketsByVolume(10)
+```
+
+## Testing
+
+The project includes comprehensive test coverage:
+
+```bash
+# Run all tests
+bun test
+
+# Run tests in watch mode
+bun test:watch
+
+# Run specific test file
+bun test src/__tests__/db.test.ts
+```
+
+Test coverage includes:
+- Database connection and health checks
+- Repository CRUD operations
+- TimescaleDB features (hypertables, continuous aggregates)
+- Analytics queries
+- Market matching and arbitrage detection
+
+## Rate Limiting
+
+The Dome API free tier has a rate limit of 1 request per second. The application handles this automatically with built-in delays between API calls. For faster data loading, consider upgrading your Dome API plan.
+
+## Troubleshooting
+
+### Database Connection Issues
+
+If you see connection errors:
+
+1. **Verify Docker is running**: 
+   ```bash
+   docker ps
+   ```
+   If Docker isn't running, start Docker Desktop or Docker Engine.
+
+2. **Check if the database container is running**:
+   ```bash
+   docker compose ps
+   ```
+   You should see `predmarket-timescaledb` with status "healthy".
+
+3. **Start the database if it's not running**:
+   ```bash
+   bun run db:up
+   ```
+
+4. **Check database logs**:
+   ```bash
+   bun run db:logs
+   ```
+
+5. **Verify environment variables** match `docker-compose.yml` defaults (or update your `.env` file accordingly)
+
+### TimescaleDB Extension Not Found
+
+If you see errors about TimescaleDB extension:
+
+1. Ensure you're using the TimescaleDB Docker image (not plain PostgreSQL)
+2. Check that migrations ran: `docker compose logs timescaledb | grep "CREATE EXTENSION"`
+
+### Port Already in Use
+
+If port 5432 is already in use:
+
+1. Change the port in `docker-compose.yml`
+2. Update `DB_PORT` in your `.env` file
 
 ## Tech Stack
 
 - **Runtime**: [Bun](https://bun.sh)
-- **UI Framework**: [React](https://react.dev) + [Ink](https://github.com/vadimdemedes/ink) (terminal UI)
-- **LLM Integration**: [LangChain.js](https://js.langchain.com) with multi-provider support (OpenAI, Anthropic, Google)
+- **UI Framework**: [Solid.js](https://solidjs.com) + [@opentui/solid](https://github.com/opentui/solid) (terminal UI)
+- **Database**: [TimescaleDB](https://www.timescale.com) (PostgreSQL + time-series extensions)
+- **API**: [Dome API](https://domeapi.io) (unified Kalshi + Polymarket data)
 - **Schema Validation**: [Zod](https://zod.dev)
 - **Language**: TypeScript
 
+## Development
 
-### Changing Models
+### Type Checking
 
-Type `/model` in the CLI to switch between:
-- GPT 4.1 (OpenAI)
-- Claude Sonnet 4.5 (Anthropic)
-- Gemini 3 (Google)
+```bash
+bun run typecheck
+```
 
-## How to Contribute
+### Building
 
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
-
-**Important**: Please keep your pull requests small and focused.  This will make it easier to review and merge.
-
+```bash
+bun run build
+```
 
 ## License
 
-This project is licensed under the MIT License.
-
+MIT License

@@ -12,6 +12,8 @@ const DEFAULT_BASE_URL = "https://api.domeapi.io/v1"
 const DEFAULT_TIMEOUT_MS = 30000
 const DEFAULT_RETRY_ATTEMPTS = 2
 const DEFAULT_RETRY_DELAY_MS = 500
+const RATE_LIMIT_DELAY_MS = 1100 // Dome API free tier: 1 request per second
+const MAX_PAGES = 10 // Limit pages to avoid rate limit exhaustion (1000 markets max per platform)
 
 function parseEnvNumber(value: string | undefined): number | undefined {
   if (!value) return undefined
@@ -160,12 +162,17 @@ export class DomeClient {
     let offset = 0
     const limit = 100
     let hasMore = true
+    let pageCount = 0
 
-    while (hasMore) {
+    while (hasMore && pageCount < MAX_PAGES) {
       const response = await this.getPolymarketMarkets({ limit, offset, status })
       allMarkets.push(...response.markets.map((m) => this.transformPolymarketMarket(m)))
       hasMore = response.pagination.has_more
       offset += limit
+      pageCount++
+      if (hasMore && pageCount < MAX_PAGES) {
+        await sleep(RATE_LIMIT_DELAY_MS)
+      }
     }
 
     return allMarkets
@@ -201,12 +208,17 @@ export class DomeClient {
     let offset = 0
     const limit = 100
     let hasMore = true
+    let pageCount = 0
 
-    while (hasMore) {
+    while (hasMore && pageCount < MAX_PAGES) {
       const response = await this.getKalshiMarkets({ limit, offset, status })
       allMarkets.push(...response.markets.map((m) => this.transformKalshiMarket(m)))
       hasMore = response.pagination.has_more
       offset += limit
+      pageCount++
+      if (hasMore && pageCount < MAX_PAGES) {
+        await sleep(RATE_LIMIT_DELAY_MS)
+      }
     }
 
     return allMarkets

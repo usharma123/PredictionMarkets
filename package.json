@@ -13,11 +13,15 @@
     "build": "bun run scripts/build.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "test:watch": "bun test --watch"
+    "test:watch": "bun test --watch",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:logs": "docker compose logs -f timescaledb"
   },
   "dependencies": {
     "@opentui/solid": "^0.1.69",
     "dotenv": "^17.2.3",
+    "postgres": "^3.4.8",
     "solid-js": "^1.9.5",
     "zod": "^4.1.13"
   },

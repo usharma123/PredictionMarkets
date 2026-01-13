@@ -2,6 +2,13 @@ import { createEffect, createMemo, createSignal } from "solid-js"
 import type { Market } from "../models/market"
 import { domeClient } from "../api/dome"
 import { calculateSimilarity, keywordOverlap, normalizeTitle } from "../utils/fuzzy"
+import {
+  isDatabaseAvailable,
+  marketsRepository,
+  snapshotsRepository,
+  cacheManager,
+  type DataSource,
+} from "../db"
 
 export interface MarketsState {
   kalshi: Market[]
@@ -20,6 +27,8 @@ const [lastUpdated, setLastUpdated] = createSignal<Date | null>(null)
 const [kalshiConnected, setKalshiConnected] = createSignal(false)
 const [polymarketConnected, setPolymarketConnected] = createSignal(false)
 const [domeConnected, setDomeConnected] = createSignal(false)
+const [dbConnected, setDbConnected] = createSignal(false)
+const [dataSource, setDataSource] = createSignal<DataSource>("api")
 
 export interface MarketSearchResult {
   key: string
@@ -116,12 +125,87 @@ createEffect(() => {
   }
 })
 
+// ============================================
+// Database Persistence Helpers
+// ============================================
+
+/**
+ * Persist markets to database (non-blocking)
+ * This writes market metadata and price snapshots
+ */
+async function persistMarketsToDb(
+  markets: Market[],
+  platform: "kalshi" | "polymarket"
+): Promise<void> {
+  try {
+    // Check DB availability
+    const dbAvailable = await isDatabaseAvailable()
+    if (!dbAvailable) {
+      setDbConnected(false)
+      return
+    }
+    setDbConnected(true)
+
+    // Upsert markets and get DB IDs
+    const idMap = await marketsRepository.upsertMarkets(markets)
+
+    // Insert price snapshots
+    const snapshots = markets
+      .filter((market) => idMap.has(market.id))
+      .map((market) => ({
+        marketDbId: idMap.get(market.id)!,
+        market,
+      }))
+
+    if (snapshots.length > 0) {
+      await snapshotsRepository.insertSnapshots(snapshots, "api")
+    }
+
+    // Update cache
+    cacheManager.setCachedMarkets(platform, markets)
+  } catch (err) {
+    console.warn(`Failed to persist ${platform} markets to DB:`, err)
+    // Don't throw - DB failure shouldn't break the app
+  }
+}
+
+/**
+ * Load markets from database (fallback when API fails)
+ */
+async function loadMarketsFromDb(
+  platform: "kalshi" | "polymarket"
+): Promise<Market[]> {
+  try {
+    const dbAvailable = await isDatabaseAvailable()
+    if (!dbAvailable) return []
+
+    const markets = await marketsRepository.getMarketsWithLatestSnapshot(platform)
+    return markets
+  } catch (err) {
+    console.warn(`Failed to load ${platform} markets from DB:`, err)
+    return []
+  }
+}
+
+/**
+ * Check if we have cached data that's still fresh
+ */
+function getCachedMarketsIfFresh(platform: string): Market[] | null {
+  return cacheManager.getCachedMarkets(platform)
+}
+
+// ============================================
+// API Fetch Functions
+// ============================================
+
 export async function fetchKalshiMarkets(): Promise<Market[]> {
   try {
     const markets = await domeClient.getAllKalshiMarkets("open")
     setKalshiMarkets(markets)
     setKalshiConnected(true)
     setDomeConnected(true)
+    // Persist to DB in background
+    persistMarketsToDb(markets, "kalshi")
     return markets
   } catch (err) {
     setKalshiConnected(false)
@@ -135,6 +219,8 @@ export async function fetchPolymarketMarkets(): Promise<Market[]> {
     setPolymarketMarkets(markets)
     setPolymarketConnected(true)
     setDomeConnected(true)
+    // Persist to DB in background
+    persistMarketsToDb(markets, "polymarket")
     return markets
   } catch (err) {
     setPolymarketConnected(false)
@@ -142,40 +228,74 @@ export async function fetchPolymarketMarkets(): Promise<Market[]> {
   }
 }
 
-export async function fetchAllMarkets(): Promise<void> {
+export async function fetchAllMarkets(forceRefresh = false): Promise<void> {
   if (loading()) return
   setLoading(true)
   setError(null)
 
   try {
-    const [kalshiResult, polymarketResult] = await Promise.allSettled([
-      domeClient.getAllKalshiMarkets("open"),
-      domeClient.getAllPolymarketMarkets("open"),
-    ])
-
     let hasSuccess = false
     let errorMessage: string | null = null
 
-    if (kalshiResult.status === "fulfilled") {
-      setKalshiMarkets(kalshiResult.value)
-      setKalshiConnected(true)
-      hasSuccess = true
-    } else {
-      setKalshiConnected(false)
-      errorMessage = kalshiResult.reason instanceof Error
-        ? kalshiResult.reason.message
-        : "Failed to fetch Kalshi markets"
+    // Check cache first (unless forcing refresh)
+    if (!forceRefresh) {
+      const cachedKalshi = getCachedMarketsIfFresh("kalshi")
+      const cachedPoly = getCachedMarketsIfFresh("polymarket")
+
+      if (cachedKalshi && cachedPoly) {
+        setKalshiMarkets(cachedKalshi)
+        setPolymarketMarkets(cachedPoly)
+        setKalshiConnected(true)
+        setPolymarketConnected(true)
+        setDataSource("cache")
+        setLastUpdated(new Date())
+        setLoading(false)
+        return
+      }
     }
 
-    if (polymarketResult.status === "fulfilled") {
-      setPolymarketMarkets(polymarketResult.value)
-      setPolymarketConnected(true)
+    // Fetch sequentially to respect rate limits (1 req/sec on free tier)
+    try {
+      const markets = await domeClient.getAllKalshiMarkets("open")
+      setKalshiMarkets(markets)
+      setKalshiConnected(true)
+      setDataSource("api")
       hasSuccess = true
-    } else {
+      // Persist in background
+      persistMarketsToDb(markets, "kalshi")
+    } catch (err) {
+      setKalshiConnected(false)
+      errorMessage = err instanceof Error ? err.message : "Failed to fetch Kalshi markets"
+      // Fallback to DB
+      const dbMarkets = await loadMarketsFromDb("kalshi")
+      if (dbMarkets.length > 0) {
+        setKalshiMarkets(dbMarkets)
+        setDataSource("db")
+        hasSuccess = true
+      }
+    }
+
+    // Wait before fetching next platform to respect rate limit
+    await new Promise((resolve) => setTimeout(resolve, 1100))
+
+    try {
+      const markets = await domeClient.getAllPolymarketMarkets("open")
+      setPolymarketMarkets(markets)
+      setPolymarketConnected(true)
+      setDataSource("api")
+      hasSuccess = true
+      // Persist in background
+      persistMarketsToDb(markets, "polymarket")
+    } catch (err) {
       setPolymarketConnected(false)
-      errorMessage = polymarketResult.reason instanceof Error
-        ? polymarketResult.reason.message
-        : "Failed to fetch Polymarket markets"
+      errorMessage = err instanceof Error ? err.message : "Failed to fetch Polymarket markets"
+      // Fallback to DB
+      const dbMarkets = await loadMarketsFromDb("polymarket")
+      if (dbMarkets.length > 0) {
+        setPolymarketMarkets(dbMarkets)
+        setDataSource("db")
+        hasSuccess = true
+      }
     }
 
     if (hasSuccess) {
@@ -218,6 +338,8 @@ export function useMarkets() {
     kalshiConnected,
     polymarketConnected,
     domeConnected,
+    dbConnected,
+    dataSource,
     marketSearchQuery,
     marketSearchResults,
     selectedSearchMarket,
@@ -239,9 +361,9 @@ export {
   kalshiConnected,
   polymarketConnected,
   domeConnected,
+  dbConnected,
+  dataSource,
   marketSearchQuery,
-  marketSearchResults,
-  selectedSearchMarket,
   selectedSearchMarketKey,
   setMarketSearchQuery,
   setSelectedSearchMarketKey,

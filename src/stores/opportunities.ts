@@ -2,6 +2,11 @@ import { createSignal, createMemo, createEffect } from "solid-js"
 import type { ArbitrageOpportunity, IntraMarketOpportunity } from "../models/opportunity"
 import { detector, type DetectionResult } from "../arbitrage/detector"
 import { kalshiMarkets, polymarketMarkets } from "./markets"
+import {
+  isDatabaseAvailable,
+  opportunitiesRepository,
+  marketsRepository,
+} from "../db"
 
 export type OpportunityFilter = "all" | "cross-market" | "intra-market"
 export type SortField = "profit" | "confidence" | "time"
@@ -18,12 +23,68 @@ const [filter, setFilter] = createSignal<OpportunityFilter>("all")
 const [sortField, setSortField] = createSignal<SortField>("profit")
 const [sortOrder, setSortOrder] = createSignal<SortOrder>("desc")
 const [minProfit, setMinProfit] = createSignal(0.5)
+const [lastScanId, setLastScanId] = createSignal<number | null>(null)
+const [scanCount, setScanCount] = createSignal(0)
 
 export function detectOpportunities(): DetectionResult {
   const result = detector.detect(kalshiMarkets(), polymarketMarkets())
   setCrossMarketOpportunities(result.crossMarket)
   setIntraMarketOpportunities(result.intraMarket)
+  setScanCount((c) => c + 1)
+
+  // Persist to DB in background (non-blocking)
+  persistOpportunitiesToDb(result).catch((err) => {
+    console.warn("Failed to persist opportunities:", err)
+  })
+
   return result
+}
+
+async function persistOpportunitiesToDb(result: DetectionResult): Promise<void> {
+  try {
+    const dbAvailable = await isDatabaseAvailable()
+    if (!dbAvailable) return
+
+    // Start scan tracking
+    const scanId = await opportunitiesRepository.startScan()
+    setLastScanId(parseInt(scanId, 10))
+
+    // Get market DB IDs for mapping (separate by platform)
+    const kalshiIds = kalshiMarkets().map((m) => m.id)
+    const polyIds = polymarketMarkets().map((m) => m.id)
+
+    const kalshiIdMap = await marketsRepository.getDbIds("kalshi", kalshiIds)
+    const polyIdMap = await marketsRepository.getDbIds("polymarket", polyIds)
+
+    // Persist cross-market opportunities
+    for (const opp of result.crossMarket) {
+      const kalshiMarket = opp.events.kalshi
+      const polyMarket = opp.events.polymarket
+
+      if (!kalshiMarket || !polyMarket) continue
+
+      const kalshiDbId = kalshiIdMap.get(kalshiMarket.id)
+      const polyDbId = polyIdMap.get(polyMarket.id)
+
+      if (kalshiDbId && polyDbId) {
+        await opportunitiesRepository.upsertCrossMarketOpportunity(
+          opp,
+          kalshiDbId,
+          polyDbId
+        )
+      }
+    }
+
+    // Complete scan
+    await opportunitiesRepository.completeScan(scanId, {
+      kalshiCount: kalshiMarkets().length,
+      polymarketCount: polymarketMarkets().length,
+      crossOpportunities: result.crossMarket.length,
+      intraOpportunities: result.intraMarket.length,
+    })
+  } catch (err) {
+    console.warn("Error persisting opportunities:", err)
+  }
 }
 
 export const filteredOpportunities = createMemo(() => {
@@ -133,6 +194,8 @@ export function useOpportunities() {
     sortField,
     sortOrder,
     minProfit,
+    lastScanId,
+    scanCount,
     setFilter,
     setSortField,
     setSortOrder,
@@ -151,4 +214,6 @@ export {
   sortField as opportunitySortField,
   sortOrder as opportunitySortOrder,
   minProfit as opportunityMinProfit,
+  lastScanId,
+  scanCount,
 }
